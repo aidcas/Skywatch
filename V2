@@ -1,0 +1,583 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>SkyWatch - Overhead Flight Radar</title>
+  <style>
+    :root {
+      --bg-color: #0b0f19;
+      --card-bg: #161f30;
+      --accent-blue: #00d2ff;
+      --accent-military: #ff9d00;
+      --accent-emergency: #ff3b30;
+      --text-main: #f0f4f8;
+      --text-sub: #8a99ad;
+      --border-color: #24324a;
+    }
+
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      background-color: var(--bg-color);
+      color: var(--text-main);
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+      height: 100vh;
+      overflow: hidden;
+      display: flex;
+      flex-direction: column;
+    }
+
+    header {
+      padding: 12px 20px;
+      background: #0f172a;
+      border-bottom: 1px solid var(--border-color);
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+
+    .title-group { display: flex; align-items: center; gap: 10px; }
+    .title-group h1 { font-size: 1.2rem; font-weight: 700; letter-spacing: 0.5px; }
+    .badge {
+      background: #1e293b;
+      padding: 4px 8px;
+      border-radius: 4px;
+      font-size: 0.75rem;
+      color: var(--accent-blue);
+      border: 1px solid var(--border-color);
+    }
+
+    .controls { display: flex; gap: 10px; align-items: center; font-size: 0.85rem; }
+    .controls input {
+      background: var(--card-bg);
+      border: 1px solid var(--border-color);
+      color: white;
+      padding: 4px 8px;
+      border-radius: 4px;
+      width: 70px;
+    }
+
+    .dashboard {
+      flex: 1;
+      display: grid;
+      grid-template-columns: 1fr 420px;
+      gap: 15px;
+      padding: 15px;
+      height: calc(100vh - 110px);
+    }
+
+    .radar-container {
+      background: var(--card-bg);
+      border-radius: 12px;
+      border: 1px solid var(--border-color);
+      position: relative;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      overflow: hidden;
+    }
+
+    canvas { display: block; width: 100%; height: 100%; }
+
+    .focus-panel {
+      background: var(--card-bg);
+      border-radius: 12px;
+      border: 1px solid var(--border-color);
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+      position: relative;
+    }
+
+    .photo-wrapper {
+      width: 100%;
+      height: 220px;
+      background: #090d16;
+      position: relative;
+      overflow: hidden;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+
+    .photo-wrapper img {
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+    }
+
+    .photo-placeholder {
+      color: var(--text-sub);
+      font-size: 0.85rem;
+      text-align: center;
+    }
+
+    .status-banner {
+      padding: 6px 12px;
+      font-size: 0.75rem;
+      font-weight: bold;
+      text-transform: uppercase;
+      letter-spacing: 1px;
+      text-align: center;
+      background: #1e293b;
+    }
+    .status-banner.military { background: var(--accent-military); color: #000; }
+    .status-banner.emergency { background: var(--accent-emergency); color: #fff; animation: blink 1s infinite; }
+
+    @keyframes blink { 50% { opacity: 0.5; } }
+
+    .plane-details {
+      padding: 15px;
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+      overflow-y: auto;
+    }
+
+    .primary-info { display: flex; justify-content: space-between; align-items: baseline; }
+    .callsign { font-size: 1.8rem; font-weight: 800; color: #fff; }
+    .registration { font-size: 0.9rem; color: var(--text-sub); }
+
+    .grid-stats {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 10px;
+    }
+
+    .stat-card {
+      background: rgba(255, 255, 255, 0.03);
+      padding: 10px;
+      border-radius: 8px;
+      border: 1px solid rgba(255, 255, 255, 0.05);
+    }
+
+    .stat-label { font-size: 0.7rem; color: var(--text-sub); text-transform: uppercase; }
+    .stat-value { font-size: 1.1rem; font-weight: 600; margin-top: 2px; }
+
+    .ticker-bar {
+      height: 45px;
+      background: #0f172a;
+      border-top: 1px solid var(--border-color);
+      display: flex;
+      align-items: center;
+      padding: 0 15px;
+      gap: 15px;
+      overflow-x: auto;
+      white-space: nowrap;
+    }
+
+    .ticker-item {
+      font-size: 0.8rem;
+      background: var(--card-bg);
+      padding: 6px 12px;
+      border-radius: 6px;
+      border: 1px solid var(--border-color);
+      cursor: pointer;
+      display: inline-flex;
+      gap: 8px;
+    }
+
+    .ticker-item.active { border-color: var(--accent-blue); }
+
+    @media (max-width: 800px) {
+      .dashboard { grid-template-columns: 1fr; grid-template-rows: 1fr 1fr; }
+    }
+
+    .fun-fact-card {
+      background: rgba(0, 210, 255, 0.05);
+      border: 1px solid rgba(0, 210, 255, 0.2);
+      border-radius: 8px;
+      padding: 10px 12px;
+      margin-top: 5px;
+    }
+    .fun-fact-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      font-size: 0.75rem;
+      color: var(--accent-blue);
+      font-weight: 700;
+      margin-bottom: 6px;
+    }
+    .fun-fact-btn {
+      background: var(--card-bg);
+      border: 1px solid var(--border-color);
+      color: var(--text-main);
+      padding: 2px 6px;
+      border-radius: 4px;
+      font-size: 0.65rem;
+      cursor: pointer;
+    }
+    .fun-fact-btn:hover {
+      border-color: var(--accent-blue);
+    }
+    .fun-fact-text {
+      font-size: 0.8rem;
+      color: var(--text-sub);
+      line-height: 1.3;
+    }
+  </style>
+</head>
+<body>
+
+  <header>
+    <div class="title-group">
+      <h1>SkyWatch Radar</h1>
+      <span class="badge" id="traffic-count">0 Overhead</span>
+    </div>
+    <div class="controls">
+      <label>Lat: <input type="number" id="lat" step="0.001" value="53.185"></label>
+      <label>Lon: <input type="number" id="lon" step="0.001" value="-0.808"></label>
+      <label>Radius (mi): <input type="number" id="radius" value="30"></label>
+    </div>
+  </header>
+
+  <div class="dashboard">
+    <div class="radar-container">
+      <canvas id="radarCanvas"></canvas>
+    </div>
+
+    <div class="focus-panel">
+      <div class="photo-wrapper" id="photoWrapper">
+        <div class="photo-placeholder">Searching aircraft image...</div>
+      </div>
+      <div id="statusBanner" class="status-banner">Commercial Flight</div>
+
+      <div class="plane-details">
+        <div class="primary-info">
+          <div>
+            <div class="callsign" id="valCallsign">----</div>
+            <div class="registration" id="valType">Aircraft Type</div>
+          </div>
+          <div style="text-align: right;">
+            <div class="registration" id="valReg">REG: ----</div>
+            <div class="registration" id="valIcao">ICAO: ----</div>
+          </div>
+        </div>
+
+        <div class="grid-stats">
+          <div class="stat-card">
+            <div class="stat-label">Distance</div>
+            <div class="stat-value" id="valDist">-- mi</div>
+          </div>
+          <div class="stat-card">
+            <div class="stat-label">Altitude</div>
+            <div class="stat-value" id="valAlt">-- ft</div>
+          </div>
+          <div class="stat-card">
+            <div class="stat-label">Speed</div>
+            <div class="stat-value" id="valSpeed">-- mph</div>
+          </div>
+          <div class="stat-card">
+            <div class="stat-label">Squawk Code</div>
+            <div class="stat-value" id="valSquawk">----</div>
+          </div>
+        </div>
+
+        <div class="fun-fact-card">
+          <div class="fun-fact-header">
+            <span>💡 AVIATION FUN FACT</span>
+            <button class="fun-fact-btn" onclick="nextFunFact()">New Fact 🎲</button>
+          </div>
+          <div class="fun-fact-text" id="valFunFact">Click "New Fact" to discover aviation trivia!</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="ticker-bar" id="tickerBar">
+    <div style="color: var(--text-sub); font-size: 0.8rem;" id="statusMsg">Scanning airspace...</div>
+  </div>
+
+  <script>
+    let userLat = 53.185;
+    let userLon = -0.808;
+    let radiusMiles = 30;
+    let activeFlights = [];
+    let selectedHex = null;
+
+    async function requestWakeLock() {
+      try {
+        if ('wakeLock' in navigator) {
+          await navigator.wakeLock.request('screen');
+        }
+      } catch (err) {}
+    }
+    requestWakeLock();
+    document.addEventListener('visibilitychange', () => {
+      if (document.visibilityState === 'visible') requestWakeLock();
+    });
+
+    document.getElementById('lat').addEventListener('change', e => { userLat = parseFloat(e.target.value); fetchFlightData(); });
+    document.getElementById('lon').addEventListener('change', e => { userLon = parseFloat(e.target.value); fetchFlightData(); });
+    document.getElementById('radius').addEventListener('change', e => { radiusMiles = parseFloat(e.target.value); fetchFlightData(); });
+
+    function getDistanceMiles(lat1, lon1, lat2, lon2) {
+      const R = 3958.8;
+      const dLat = (lat2 - lat1) * Math.PI / 180;
+      const dLon = (lon2 - lon1) * Math.PI / 180;
+      const a = Math.sin(dLat/2) * Math.sin(dLat/2) +
+                Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) *
+                Math.sin(dLon/2) * Math.sin(dLon/2);
+      return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+    }
+
+    async function fetchFlightData() {
+      const radiusKm = Math.round(radiusMiles * 1.852);
+      let rawAircraft = [];
+      let success = false;
+
+      try {
+        const res = await fetch(`https://api.adsb.lol/v2/lat/${userLat}/lon/${userLon}/dist/${radiusKm}`);
+        if (res.ok) {
+          const data = await res.json();
+          rawAircraft = data.ac || [];
+          success = true;
+        }
+      } catch (e) {
+        console.warn('adsb.lol failed, trying fallback...');
+      }
+
+      if (!success) {
+        try {
+          const res = await fetch(`https://opendata.adsb.fi/api/v3/lat/${userLat}/lon/${userLon}/dist/${radiusMiles}`);
+          if (res.ok) {
+            const data = await res.json();
+            rawAircraft = data.aircraft || [];
+            success = true;
+          }
+        } catch (e) {
+          console.warn('adsb.fi failed');
+        }
+      }
+
+      activeFlights = rawAircraft.map(ac => {
+        const lat = ac.lat;
+        const lon = ac.lon;
+        if (!lat || !lon) return null;
+
+        const dist = getDistanceMiles(userLat, userLon, lat, lon);
+        if (dist > radiusMiles) return null;
+
+        const isMilitary = ac.dbFlags === 1 || ac.military === true || (ac.t && ['E3TF', 'TYPH', 'C30J', 'A400', 'ZZZZ'].includes(ac.t));
+        const isEmergency = ac.squawk === '7700' || ac.squawk === '7600' || ac.squawk === '7500';
+
+        return {
+          hex: ac.hex,
+          callsign: (ac.flight || ac.r || ac.hex).trim(),
+          type: ac.t || 'Unknown',
+          reg: ac.r || 'N/A',
+          lat: lat,
+          lon: lon,
+          alt: ac.alt_baro || ac.alt_geom || 0,
+          speed: ac.gs || 0,
+          squawk: ac.squawk || 'N/A',
+          dist: dist,
+          isMilitary: isMilitary,
+          isEmergency: isEmergency,
+          priority: (isEmergency ? 1000 : 0) + (isMilitary ? 500 : 0) + (100 - dist)
+        };
+      }).filter(Boolean).sort((a, b) => b.priority - a.priority);
+
+      updateUI();
+    }
+
+    async function fetchPlanePhoto(hex, reg) {
+      const photoWrapper = document.getElementById('photoWrapper');
+      photoWrapper.innerHTML = `<div class="photo-placeholder">Searching photo...</div>`;
+
+      try {
+        const query = (reg && reg !== 'N/A') ? reg : hex;
+        const res = await fetch(`https://api.planespotters.net/pub/photos/reg/${query}`);
+        const data = await res.json();
+
+        if (data.photos && data.photos.length > 0) {
+          const photoUrl = data.photos[0].thumbnail_large.src;
+          const photographer = data.photos[0].photographer;
+          photoWrapper.innerHTML = `
+            <img src="${photoUrl}" alt="Aircraft Photo">
+            <div style="position:absolute; bottom:5px; right:8px; font-size:0.65rem; background:rgba(0,0,0,0.6); padding:2px 6px; border-radius:4px; color:#ccc;">
+              © ${photographer}
+            </div>`;
+        } else {
+          photoWrapper.innerHTML = `<div class="photo-placeholder">No photo available for ${query}</div>`;
+        }
+      } catch (err) {
+        photoWrapper.innerHTML = `<div class="photo-placeholder">Photo unavailable</div>`;
+      }
+    }
+
+    function updateUI() {
+      document.getElementById('traffic-count').innerText = `${activeFlights.length} Overhead`;
+
+      if (!selectedHex || !activeFlights.find(f => f.hex === selectedHex)) {
+        selectedHex = activeFlights.length > 0 ? activeFlights[0].hex : null;
+      }
+
+      const focusPlane = activeFlights.find(f => f.hex === selectedHex);
+
+      if (focusPlane) {
+        document.getElementById('valCallsign').innerText = focusPlane.callsign;
+        document.getElementById('valType').innerText = focusPlane.type;
+        document.getElementById('valReg').innerText = `REG: ${focusPlane.reg}`;
+        document.getElementById('valIcao').innerText = `ICAO: ${focusPlane.hex.toUpperCase()}`;
+        document.getElementById('valDist').innerText = `${focusPlane.dist.toFixed(1)} mi`;
+        document.getElementById('valAlt').innerText = `${focusPlane.alt.toLocaleString()} ft`;
+        document.getElementById('valSpeed').innerText = `${Math.round(focusPlane.speed * 1.15078)} mph`;
+        document.getElementById('valSquawk').innerText = focusPlane.squawk;
+
+        const banner = document.getElementById('statusBanner');
+        if (focusPlane.isEmergency) {
+          banner.innerText = `EMERGENCY ALERT (SQUAWK ${focusPlane.squawk})`;
+          banner.className = 'status-banner emergency';
+        } else if (focusPlane.isMilitary) {
+          banner.innerText = 'MILITARY / GOVERNMENT AIRCRAFT';
+          banner.className = 'status-banner military';
+        } else {
+          banner.innerText = 'COMMERCIAL / GENERAL AVIATION';
+          banner.className = 'status-banner';
+        }
+
+        if (photoWrapper.dataset.currentHex !== focusPlane.hex) {
+          photoWrapper.dataset.currentHex = focusPlane.hex;
+          fetchPlanePhoto(focusPlane.hex, focusPlane.reg);
+        }
+      }
+
+      const ticker = document.getElementById('tickerBar');
+      if (activeFlights.length === 0) {
+        ticker.innerHTML = `<div style="color: var(--text-sub); font-size: 0.8rem;" id="statusMsg">No aircraft within range. Scanning airspace...</div>`;
+      } else {
+        ticker.innerHTML = activeFlights.map(f => `
+          <div class="ticker-item ${f.hex === selectedHex ? 'active' : ''}" onclick="selectPlane('${f.hex}')">
+            <strong style="color:${f.isEmergency ? 'var(--accent-emergency)' : f.isMilitary ? 'var(--accent-military)' : 'var(--accent-blue)'}">${f.callsign}</strong>
+            <span>${f.type}</span>
+            <span>(${f.dist.toFixed(1)} mi)</span>
+          </div>
+        `).join('');
+      }
+    }
+
+    function selectPlane(hex) {
+      selectedHex = hex;
+      updateUI();
+    }
+
+    const canvas = document.getElementById('radarCanvas');
+    const ctx = canvas.getContext('2d');
+    let sweepAngle = 0;
+
+    function resizeCanvas() {
+      canvas.width = canvas.parentElement.clientWidth;
+      canvas.height = canvas.parentElement.clientHeight;
+    }
+    window.addEventListener('resize', resizeCanvas);
+    resizeCanvas();
+
+    function drawRadar() {
+      const width = canvas.width;
+      const height = canvas.height;
+      const cX = width / 2;
+      const cY = height / 2;
+      const maxRadius = Math.min(width, height) / 2 - 20;
+
+      ctx.clearRect(0, 0, width, height);
+
+      ctx.strokeStyle = '#24324a';
+      ctx.lineWidth = 1;
+      for (let i = 1; i <= 3; i++) {
+        ctx.beginPath();
+        ctx.arc(cX, cY, (maxRadius / 3) * i, 0, Math.PI * 2);
+        ctx.stroke();
+      }
+
+      ctx.beginPath();
+      ctx.moveTo(cX - maxRadius, cY); ctx.lineTo(cX + maxRadius, cY);
+      ctx.moveTo(cX, cY - maxRadius); ctx.lineTo(cX, cY + maxRadius);
+      ctx.stroke();
+
+      sweepAngle += 0.015;
+      ctx.beginPath();
+      ctx.moveTo(cX, cY);
+      ctx.arc(cX, cY, maxRadius, sweepAngle, sweepAngle + 0.2);
+      ctx.lineTo(cX, cY);
+      ctx.fillStyle = 'rgba(0, 210, 255, 0.08)';
+      ctx.fill();
+
+      ctx.fillStyle = '#00d2ff';
+      ctx.beginPath();
+      ctx.arc(cX, cY, 4, 0, Math.PI * 2);
+      ctx.fill();
+
+      activeFlights.forEach(f => {
+        const dLat = f.lat - userLat;
+        const dLon = f.lon - userLon;
+        const latMiles = dLat * 69.0;
+        const lonMiles = dLon * 53.0;
+
+        const x = cX + (lonMiles / radiusMiles) * maxRadius;
+        const y = cY - (latMiles / radiusMiles) * maxRadius;
+
+        let color = '#00d2ff';
+        if (f.isEmergency) color = '#ff3b30';
+        else if (f.isMilitary) color = '#ff9d00';
+
+        if (f.hex === selectedHex) {
+          ctx.strokeStyle = '#ffffff';
+          ctx.lineWidth = 2;
+          ctx.beginPath();
+          ctx.arc(x, y, 10, 0, Math.PI * 2);
+          ctx.stroke();
+        }
+
+        ctx.fillStyle = color;
+        ctx.beginPath();
+        ctx.arc(x, y, 5, 0, Math.PI * 2);
+        ctx.fill();
+
+        ctx.fillStyle = '#ffffff';
+        ctx.font = '10px sans-serif';
+        ctx.fillText(f.callsign, x + 8, y + 3);
+      });
+
+      requestAnimationFrame(drawRadar);
+    }
+
+    setInterval(fetchFlightData, 8000);
+    fetchFlightData();
+    drawRadar();
+
+    const aviationFacts = [
+      "Commercial aircraft flying over Newark/Sutton on Trent often cross the busy Clacton/Lincolnshire corridor—one of the UK's busiest high-altitude flight routes.",
+      "RAF Typhoons operating nearby can accelerate from a standstill to Mach 1.5 in under 2 minutes during Quick Reaction Alert (QRA) scrambles.",
+      "Contrails behind jets overhead form when cold atmospheric air (-40°C or colder) instantly freezes the water vapor from aircraft exhaust.",
+      "Airplane tires are inflated to roughly 200 psi (6 times higher pressure than a typical car tire) so they don't pop upon landing impact.",
+      "The transponder 'Squawk 7700' is the universal emergency code. Squawk 7600 signals radio failure, and 7500 signals hijacking.",
+      "Modern commercial jetliners like the A320 and Boeing 737 burn approximately 0.6 to 0.8 gallons of jet fuel per second during cruise.",
+      "RAF Waddington and RAF Coningsby nearby in Lincolnshire are home to the UK's primary air defense radar and Typhoon squadrons.",
+      "Air Ambulance helicopters usually fly under Visual Flight Rules (VFR) at altitudes around 1,000 to 1,500 ft to land directly near incident locations.",
+      "Cruising speed for most commercial passenger jets is around Mach 0.78 to 0.85 (roughly 500 to 570 mph ground speed).",
+      "An aircraft's ICAO Hex code is a unique 24-bit binary address permanently assigned to that specific physical airframe."
+    ];
+
+    let currentFactIndex = -1;
+    function nextFunFact() {
+      let newIndex;
+      do {
+        newIndex = Math.floor(Math.random() * aviationFacts.length);
+      } while (newIndex === currentFactIndex && aviationFacts.length > 1);
+      
+      currentFactIndex = newIndex;
+      const factElem = document.getElementById('valFunFact');
+      if (factElem) {
+        factElem.innerText = aviationFacts[currentFactIndex];
+      }
+    }
+    
+    window.addEventListener('DOMContentLoaded', () => {
+      nextFunFact();
+    });
+  </script>
+</body>
+</html>
